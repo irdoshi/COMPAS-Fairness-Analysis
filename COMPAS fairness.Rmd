@@ -1,0 +1,183 @@
+---
+title: "COMPAS fairness analysis"
+author: "Isha Doshi"
+date: "2022-12-04"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+**Analyzing if COMPAS is fair**
+
+**Loaded the COMPAS data, and performed basic sanity checks.**
+
+```{r}
+compas=read.delim("compas-score-data.csv.bz2")
+head(compas)
+any(is.na(compas))
+#summary(compas)
+```
+**Filtering the data to keep only Caucasians and African-Americans**
+
+```{r}
+library(dplyr)
+compas=compas %>% 
+  filter(race %in% c("African-American", "Caucasian"))
+head(compas)
+```
+
+**Created a new dummy variable based off of COMPAS risk score (decile_score), which indicates if an individual was classified as low risk (score 1-4) or high risk (score 5-10).**
+
+```{r}
+compas=compas%>%mutate(risk_score=case_when(decile_score <= 4 ~ "low risk",
+  decile_score > 4 ~ "high risk"))
+head(compas)
+```
+
+**Now analyzing the offenders across this new risk category.**
+
+**Checking the recidivism rate for low-risk and high-risk individuals**
+
+```{r}
+#low risk rate = (no. of two_year_recid =1 where risk rate is low)/total no. of low risk rate
+low_risk_recidivism = count(compas%>%filter(risk_score=="low risk")%>%filter(two_year_recid==1)) / count(compas%>%filter(risk_score=="low risk"))
+paste("recidivism rate for low-risk is ",low_risk_recidivism)
+#low risk rate = (no. of two_year_recid =1 where risk rate is high)/total no. of high risk rate
+high_risk_recividism= count(compas%>%filter(risk_score=="high risk")%>%filter(two_year_recid==1)) / count(compas%>%filter(risk_score=="high risk"))
+paste("recidivism rate for high-risk is", high_risk_recividism)
+```
+**Checking the recidivism rates for African-Americans and Caucasians**
+
+```{r}
+#For African American = no. of two_year_recid where race equals African American/ No. of African American 
+african_american_recidivism= count(compas%>%filter(race=="African-American")%>%filter(two_year_recid==1)) / count(compas%>%filter(race=="African-American"))
+paste("recidivism rate for African Americans is",african_american_recidivism)
+#For Caucasian = no. of two_year_recid where race equals Caucasians/ No. of Caucasians
+caucasian_american_recidivism= count(compas%>%filter(race=="Caucasian")%>%filter(two_year_recid==1)) / count(compas%>%filter(race=="Caucasian"))
+paste("recidivism rate for Caucasians is",caucasian_american_recidivism)
+```
+
+**Creating a confusion matrix comparing COMPAS predictions for recidivism (is/is not low risk) and the actual two-year recidivism. To keep things coherent, let’s call recidivists “positive”. The precision here is 0.634, When COMPAS predicts high recidivism, 63.4% times it is correctly predicted. The ratio of correct positive predictions to the total positives recidivism was 64%. 881 people were predicated as low risk when they were recidivists whereas 923 people were mis-classified as high risk when they were low risk.**
+
+```{r}
+#creating confusion matrix
+#accuracy is the number of true positives and true negatives divided by total
+table(compas$risk_score,compas$two_year_recid)
+accuracy <- (1872+1602)/(1872+923+1602+881)
+paste("accuracy is", accuracy)
+#Precision is the number of true positives divided by the number of true positives plus the number of false positives
+precision<- 1602/(1602+923)
+paste("precision is",precision)
+#recall is the number of true positives divided by the number of true positives plus the number of false negatives.
+recall<-1602/(1602+881)
+paste("recall is",recall)
+```
+
+**COMPAS is only 65% accurate. I would not feel comfortable having a judge use COMPAS to inform my sentencing guideline. If they model had a higher precision (about 85-90 percent), I would have been more comfortable. Or if the false positives were very low and false negatives were high, then I would be more comfortable. Yes, human judges are also not perfect, but if we are developing an algorithm, we should make an effort to make it better than humans.**
+```{r}
+#Misclassification is 1-accuracy or (all incorrect / all) = FP + FN / TP + TN + FP + FN
+misclassification=1-accuracy
+misclassification
+```
+
+**Repeating the confusion matrix calculation and analysis but this time I will do it separately for African-Americans and Caucasians:**
+
+**This classification is slightly more accurate for Caucasians than for African Americans.**
+```{r}
+compas_AA=compas %>% 
+  filter(race =="African-American")
+table(compas_AA$risk_score,compas_AA$two_year_recid)
+accuracy <- (1188+873)/(1188+641+873+473)
+paste("accuracy for African-Americans is", accuracy)
+
+compas_C=compas %>% 
+  filter(race =="Caucasian")
+table(compas_C$risk_score,compas_C$two_year_recid)
+accuracy <- (414+999)/(282+414+999+408)
+paste("accuracy for Caucasians is", accuracy)
+```
+**There is a higher false positive rate for African Americans.**
+```{r}
+#FPR=FP/(FP+TN)
+fpr_AA=641/(641+873)
+paste("False postive rate for African Americans is", fpr_AA)
+fpr_C=282/(282+999)
+paste("False postive rate for Caucasian is", fpr_C)
+```
+**There is a higher rate of false negatives for Caucasians.**
+```{r}
+#FN/(FN+TP)
+fnr_AA=473/(473+1188)
+paste("False negative rate for African Americans is", fnr_AA)
+fnr_C=408/(408+414)
+paste("False negative rate for Caucasian is", fnr_C)
+```
+**COMPAS’s true negative and true positive percentages are similar for African-American and Caucasian individuals, but that false positive rates and false negative rates are different. I don't think COMPAS algorithm is fair. I believe similar groups of people, here defined by race, should be treated similarly. So whites who do not re-offend should have the same mis-classification rate as blacks who do not re-offend. This is clearly violated with COMPAS score.**
+
+**Attempting to make my own COMPAS!**
+
+
+**Before we start: F1 score is a weighted average of precision and recall. As we know in precision and in recall there is false positive and false negative so it also consider both of them. F1 score is usually more useful than accuracy, especially if you have an uneven class distribution. Accuracy works best if false positives and false negatives have similar cost. If the cost of false positives and false negatives are very different, it’s better to look at both Precision and Recall. We will use all these performance measures for this task.**
+
+**Split my data into training and validation set. Developed a model using logistic regression, and changing the dependent variables. We get a better model when we consider priors_count+age. The AIC score for this model is lower - 5344.**
+```{r}
+#removing variables
+compas4Model=read.delim("compas-score-data.csv.bz2")
+compas4Model=compas4Model%>%select(age, c_charge_degree, race, age_cat,sex,priors_count,two_year_recid)
+head(compas4Model)
+
+#splitting data into training and validation set 
+library(dplyr)
+
+#make this example reproducible
+set.seed(1)
+
+#create ID column
+compas4Model$id <- 1:nrow(compas4Model)
+
+#use 70% of dataset as training set and 30% as test set 
+train <- compas4Model %>% dplyr::sample_frac(0.70)
+test  <- dplyr::anti_join(compas4Model, train, by = 'id')
+head(train)
+head(test)
+
+#logistic regression 
+model1<-glm(two_year_recid~priors_count, data=train, family=binomial())
+summary(model1)
+
+model2<-glm(two_year_recid~priors_count+age, data=train, family=binomial())
+summary(model2)
+
+```
+**Added sex to the model. It improves the performance (the AIC score is 5326, which is lower), but just a tiny bit. We are adding another variables, which lowers the AIC score as well.**
+```{r}
+model3<-glm(two_year_recid~priors_count+age+sex, data=train, family=binomial())
+summary(model3)
+```
+
+**Added race. The model improves very little, the AIC score decreases to 5323.**
+```{r}
+model4<-glm(two_year_recid~priors_count+age+sex+race, data=train, family=binomial())
+summary(model4)
+```
+
+**The accuracy of my model is also 65%, which is almost the same as COMPAS. Our model is more precise. Recall on other hand is lower for our model. I considered gender and race as a part of the model, since it did improve the AIC score a little. I feel judges should consider the predictions made by these models only if they are highly accurate and precise and have a good recall. I feel judges should still consider the case and make their decision as well, not compeletly relying on the model to make the decision.**
+
+```{r}
+test <- test %>% mutate(predicted_two_year_recid = predict(model4, test))
+test=test%>%mutate(predicted_two_year_recid=case_when(predicted_two_year_recid>=0.5~0,predicted_two_year_recid<0.5~1))
+head(test)
+table(test$predicted_two_year_recid, test$two_year_recid)
+accuracyM=(968+236)/(968+236+69+579)
+paste("accuracy of our model is", accuracyM)
+
+precisionM<- 236/(236+69)
+paste("precision of our model is",precisionM)
+
+recallM<-236/(236+579)
+paste("recall of our model is",recallM)
+```
