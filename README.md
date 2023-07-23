@@ -2,7 +2,7 @@
 
 In the project, here's a breakdown of what I focused on:
 
-- Examined the COMPAS algorithm, a risk assessment tool used in the US criminal justice system, and reviewed an investigative report that suggested racial bias in its outcomes.
+- Examined the COMPAS algorithm, a case management and decision support tool used in the US criminal justice system, and reviewed an investigative report that suggested racial bias in its outcomes.
 - Worked with a subset of the dataset compiled from public records in Florida, filtering it to include only Caucasians and African-Americans.
 - Created a new variable based on the COMPAS risk score to classify individuals as low risk or high risk.
 - Analyzed the recidivism rates for both low-risk and high-risk individuals, as well as for African-Americans and Caucasians.
